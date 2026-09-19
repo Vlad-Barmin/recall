@@ -1,0 +1,326 @@
+{
+  "name": "recall-answer-check",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.5,
+      "position": [
+        0,
+        0
+      ],
+      "id": "5721baf6-b5d3-4664-b835-fbd1e4db1103",
+      "name": "Telegram Trigger",
+      "webhookId": "a00f2b8f-95f2-4b0a-8ee6-f58940b0e820",
+      "credentials": {
+        "telegramApi": {
+          "id": "SgZNMrHMyMdJxDmN",
+          "name": "Telegram - Recall Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select id, question_text, reference_answer\nfrom questions\nwhere status = 'pending'\norder by created_at desc\nlimit 1;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        448,
+        0
+      ],
+      "id": "154faf5a-bf71-4002-9059-b64c45f7a632",
+      "name": "Get Pending Question",
+      "credentials": {
+        "postgres": {
+          "id": "bq5e6qF75l8wtXbn",
+          "name": "Supabase — Recall"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        608,
+        208
+      ],
+      "id": "76ca14c7-4bae-4de5-9162-68b172da4371",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "O54ZF3v04nummSbe",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Ты проверяешь ответ на вопрос по технической теме.\n\nВОПРОС:\n{ $json.nonexistent.field }}\n\nЭТАЛОННЫЙ ОТВЕТ:\n{{ $json.reference_answer }}\n\nОТВЕТ ПОЛЬЗОВАТЕЛЯ:\n{{ $('Telegram Trigger').first().json.message.text }}\n\nСравни ответ пользователя с эталонным. Оценивай смысл, а не формулировки: пользователь отвечает своими словами, дословного совпадения не требуется. Опечатки и отсутствие знаков препинания не влияют на оценку.\n\nВердикт выбери из трёх:\n- \"correct\" — переданы все ключевые смыслы эталона\n- \"partial\" — часть смыслов передана верно, часть упущена или искажена\n- \"incorrect\" — ключевые смыслы не переданы или ответ по сути неверен\n\nВерни ТОЛЬКО JSON без markdown-обёртки, без пояснений до или после:\n{\n  \"verdict\": \"correct\" | \"partial\" | \"incorrect\",\n  \"missed\": \"что упущено или искажено, одним предложением; пустая строка если всё верно\",\n  \"explanation\": \"короткое пояснение вердикта, 1-2 предложения, обращайся к пользователю на ты\"\n}",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        672,
+        0
+      ],
+      "id": "6139ee15-6d61-4452-8ca6-6c2cdedf6cd7",
+      "name": "Check Answer"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.text;\n\nif (typeof raw !== 'string' || raw.trim() === '') {\n  throw new Error('LLM вернула пустой ответ');\n}\n\n// Снимаем markdown-обёртку, если модель её добавила\nlet cleaned = raw.trim();\ncleaned = cleaned.replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```$/, '').trim();\n\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  throw new Error('Не удалось разобрать JSON от LLM: ' + cleaned.slice(0, 200));\n}\n\nconst allowed = ['correct', 'partial', 'incorrect'];\nif (!allowed.includes(parsed.verdict)) {\n  throw new Error('Недопустимый verdict: ' + String(parsed.verdict));\n}\n\nif (typeof parsed.explanation !== 'string' || parsed.explanation.trim() === '') {\n  throw new Error('Пустое поле explanation');\n}\n\nreturn [\n  {\n    json: {\n      verdict: parsed.verdict,\n      missed: typeof parsed.missed === 'string' ? parsed.missed : '',\n      explanation: parsed.explanation\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        0
+      ],
+      "id": "27c32ecc-124a-440c-8079-df4bc1408d4f",
+      "name": "Validate Verdict"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into answers (question_id, user_answer, verdict, missed, explanation)\nvalues ($1, $2, $3, $4, $5);",
+        "options": {
+          "queryReplacement": "={{ $('Get Pending Question').first().json.id }},{{ $('Telegram Trigger').first().json.message.text }},{{ $json.verdict }},{{ $json.missed }},{{ $json.explanation }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1136,
+        0
+      ],
+      "id": "889ffe87-2ab2-4491-828a-172f9d44ee1a",
+      "name": "Save Answer",
+      "credentials": {
+        "postgres": {
+          "id": "bq5e6qF75l8wtXbn",
+          "name": "Supabase — Recall"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update questions\nset status = 'answered'\nwhere id = $1;",
+        "options": {
+          "queryReplacement": "={{ $('Get Pending Question').first().json.id }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1360,
+        0
+      ],
+      "id": "8c2aeed4-fadd-40cd-babe-2653bd7777a4",
+      "name": "Mark Answered",
+      "credentials": {
+        "postgres": {
+          "id": "bq5e6qF75l8wtXbn",
+          "name": "Supabase — Recall"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').first().json.message.chat.id }}",
+        "text": "={{ $('Validate Verdict').first().json.verdict === 'correct' ? '✅ Верно' : $('Validate Verdict').first().json.verdict === 'partial' ? '🟡 Частично верно' : '❌ Неверно' }}\n\n{{ $('Validate Verdict').first().json.explanation }}\n{{ $('Validate Verdict').first().json.missed ? 'Упущено: ' + $('Validate Verdict').first().json.missed : '' }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1584,
+        0
+      ],
+      "id": "ffbde328-be97-4a40-bfc9-7727bf4048a0",
+      "name": "Send Verdict",
+      "webhookId": "f53f7f65-3fbd-48fa-9fab-e7004ae7bc81",
+      "credentials": {
+        "telegramApi": {
+          "id": "SgZNMrHMyMdJxDmN",
+          "name": "Telegram - Recall Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "87756c6b-00bb-4afe-9bdc-a7ad620de0e6",
+              "leftValue": "={{ $json.message.text }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "ab776b06-4cc7-42ef-9eca-d0e8dd9bcdd0",
+              "leftValue": "={{ $json.message.text }}",
+              "rightValue": "\t/",
+              "operator": {
+                "type": "string",
+                "operation": "notStartsWith"
+              }
+            },
+            {
+              "id": "4b39843f-3b31-4484-b55f-e44839b242b7",
+              "leftValue": "={{ $json.message.text.length }}",
+              "rightValue": 15,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        224,
+        0
+      ],
+      "id": "09588760-708a-405b-be44-5a57b0bfc4aa",
+      "name": "If"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Pending Question": {
+      "main": [
+        [
+          {
+            "node": "Check Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Check Answer",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Answer": {
+      "main": [
+        [
+          {
+            "node": "Validate Verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Verdict": {
+      "main": [
+        [
+          {
+            "node": "Save Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Answer": {
+      "main": [
+        [
+          {
+            "node": "Mark Answered",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Answered": {
+      "main": [
+        [
+          {
+            "node": "Send Verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Get Pending Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "4xAoq8ancwPtNyHS",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "9626cac4-8cea-48a7-a1a7-1433727d92b1",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "239110d05be93582257072a49d84954831a27f916a387fcbec9638d1d369bb96"
+  },
+  "nodeGroups": [],
+  "id": "tm5AvOr055ZLDWWW",
+  "tags": []
+}

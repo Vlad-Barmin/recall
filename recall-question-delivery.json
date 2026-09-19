@@ -1,0 +1,328 @@
+{
+  "name": "recall-question-delivery",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "679df5b8-506c-4338-9a19-0dbd5b6e5e5c",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_CHAT_ID",
+        "text": "={{ $json.question_text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        832,
+        0
+      ],
+      "id": "efaf8593-2353-48fd-84ae-5e04ad48ad41",
+      "name": "Send a text message",
+      "webhookId": "0fdacb2a-11fe-455e-bac3-ac2e467d8c2f",
+      "credentials": {
+        "telegramApi": {
+          "id": "SgZNMrHMyMdJxDmN",
+          "name": "Telegram - Recall Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Ты — генератор вопросов для проверки знаний.\n\nТема: {{ $json.name }}\n\nСформулируй ОДИН вопрос строго по этой теме. Требования:\n- вопрос проверяет понимание, а не заученное определение;\n- отвечать нужно свободным текстом в 2-4 предложения;\n- без вариантов ответа;\n- без кода внутри вопроса;\n- формулировка на русском, не длиннее 200 символов.\n\nВерни ТОЛЬКО JSON-объект. Без пояснений до и после,\nбез markdown, без обратных кавычек. Строго такая структура:\n\n{\"question\": \"текст вопроса\", \"reference\": \"эталонный ответ в 2-3 предложениях: что обязательно должно прозвучать в верном ответе\"}",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        448,
+        0
+      ],
+      "id": "32507696-94aa-4175-833f-ea393d5b33e2",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        160,
+        208
+      ],
+      "id": "0c930bf0-63d4-4fbb-af21-afcfdf01f64d",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "O54ZF3v04nummSbe",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.text;\n\n// Модель часто оборачивает JSON в markdown-блок — снимаем обёртку\nconst cleaned = raw\n  .replace(/```json/gi, '')\n  .replace(/```/g, '')\n  .trim();\n\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  throw new Error('Модель вернула не JSON. Получено: ' + cleaned.slice(0, 200));\n}\n\n// Проверяем, что оба поля на месте и не пустые\nfor (const field of ['question', 'reference']) {\n  if (typeof parsed[field] !== 'string' || parsed[field].trim() === '') {\n    throw new Error('Отсутствует или пустое поле: ' + field);\n  }\n}\n\nreturn [{\n  json: {\n    question: parsed.question.trim(),\n    reference: parsed.reference.trim(),\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        144
+      ],
+      "id": "e23ce636-c32a-440c-a435-b4c435610860",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list",
+          "cachedResultName": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "questions",
+          "mode": "list",
+          "cachedResultName": "questions",
+          "cachedResultUrl": ""
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "topic_id": "={{ $('Execute a SQL query').first().json.id }}",
+            "question_text": "={{ $json.question }}",
+            "reference_answer": "={{ $json.reference }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "topic_id",
+              "displayName": "topic_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "question_text",
+              "displayName": "question_text",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "reference_answer",
+              "displayName": "reference_answer",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1184,
+        144
+      ],
+      "id": "179ffd17-cff3-48b4-9a2b-cc107862b735",
+      "name": "Insert rows in a table",
+      "credentials": {
+        "postgres": {
+          "id": "bq5e6qF75l8wtXbn",
+          "name": "Supabase — Recall"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select id, name\nfrom topics\nwhere is_active = true\norder by random()\nlimit 1;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        224,
+        0
+      ],
+      "id": "e0006f10-9ab6-4d42-b723-4ab97fedf223",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "bq5e6qF75l8wtXbn",
+          "name": "Supabase — Recall"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 10
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        1408,
+        144
+      ],
+      "id": "9f5cb20e-9095-4cff-9d54-6b4490f3c258",
+      "name": "Schedule Trigger"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Insert rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert rows in a table": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "4xAoq8ancwPtNyHS",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "e33d46f2-9312-47c3-8cfd-40f190373e11",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "239110d05be93582257072a49d84954831a27f916a387fcbec9638d1d369bb96"
+  },
+  "nodeGroups": [],
+  "id": "TkfHXajjHPqnodYX",
+  "tags": []
+}

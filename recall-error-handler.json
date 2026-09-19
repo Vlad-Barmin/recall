@@ -1,0 +1,66 @@
+{
+  "name": "recall-error-handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "9b0809cb-8701-44de-af63-c758a204023a",
+      "name": "Error Trigger"
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_CHAT_ID",
+        "text": "=⚠️ Сбой воркфлоу\n\nВоркфлоу: {{ $json.workflow.name }}\nНода: {{ $json.execution.lastNodeExecuted }}\nОшибка: {{ $json.execution.error.message }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "6c0f16c7-77da-483e-a623-054151ccb5ff",
+      "name": "Send a text message",
+      "webhookId": "5d3c2898-d45c-457f-a7f8-c4ac3289d358",
+      "credentials": {
+        "telegramApi": {
+          "id": "SgZNMrHMyMdJxDmN",
+          "name": "Telegram - Recall Bot"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "4e2c6875-66c4-4900-9e05-5e40164f6fab",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "239110d05be93582257072a49d84954831a27f916a387fcbec9638d1d369bb96"
+  },
+  "nodeGroups": [],
+  "id": "4xAoq8ancwPtNyHS",
+  "tags": []
+}

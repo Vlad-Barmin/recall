@@ -161,6 +161,6 @@ n8n start
 
 ## Скриншоты
 
-<!-- заменить на реальные файлы -->
-![Диалог с ботом](docs/screenshot-dialog.png)
-![Схема воркфлоу recall-answer-check](docs/screenshot-workflow.png)
+![Диалог с ботом](screenshot-dialog.png)
+![Схема воркфлоу recall-answer-check](screenshot-workflow.png)
+![Схема воркфлоу recall-question-delivery](question-delivery.png)
